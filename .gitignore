@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.Python
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+venv/
+.venv/
+env/
+ENV/
+
+# Node.js
+node_modules/
+build/
+dist/
+npm-debug.log*
+
+# 环境与配置
+.env
+
+# 数据库
+*.db
+*.sqlite3
+data/
+
+# IDE
+.vscode/
+.idea/
+
+# 日志
+*.log
+logs/
+
+# 系统文件
+.DS_Store
