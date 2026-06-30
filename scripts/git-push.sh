@@ -110,27 +110,49 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 检查是否有待提交的变更
-if git diff --cached --quiet; then
-    info "没有待提交的变更，无需推送"
+HAS_STAGED=false
+HAS_UNPUSHED=false
+
+# 检查是否有待提交的暂存变更
+if ! git diff --cached --quiet; then
+    HAS_STAGED=true
+fi
+
+# 检查是否有未推送到远程的 commit
+if ! git remote show origin 2>/dev/null | grep -q "tracked"; then
+    # 远程分支尚未建立（首次推送）
+    HAS_UNPUSHED=true
+elif [ "$(git rev-list --count origin/main..HEAD 2>/dev/null || echo 0)" -gt 0 ]; then
+    HAS_UNPUSHED=true
+fi
+
+# 有新变更时执行 commit
+if [ "$HAS_STAGED" = true ]; then
+    echo ""
+    read -p "请输入 commit message（回车使用默认值）: " commit_msg
+    if [ -z "$commit_msg" ]; then
+        commit_msg="update: $(date '+%Y-%m-%d %H:%M:%S')"
+    fi
+
+    info "提交信息: $commit_msg"
+
+    git commit -m "$commit_msg"
+    if [ $? -ne 0 ]; then
+        error "git commit 失败"
+        exit 1
+    fi
+    info "提交完成"
+fi
+
+# 既无暂存变更也无未推送 commit，无需推送
+if [ "$HAS_STAGED" = false ] && [ "$HAS_UNPUSHED" = false ]; then
+    info "没有待提交的变更，也没有未推送的 commit，无需推送"
     exit 0
 fi
 
-# 提示用户输入 commit message
-echo ""
-read -p "请输入 commit message（回车使用默认值）: " commit_msg
-if [ -z "$commit_msg" ]; then
-    commit_msg="update: $(date '+%Y-%m-%d %H:%M:%S')"
+if [ "$HAS_STAGED" = false ] && [ "$HAS_UNPUSHED" = true ]; then
+    info "没有新的变更，但有未推送的 commit，直接推送..."
 fi
-
-info "提交信息: $commit_msg"
-
-git commit -m "$commit_msg"
-if [ $? -ne 0 ]; then
-    error "git commit 失败"
-    exit 1
-fi
-info "提交完成"
 
 info "推送到远程仓库..."
 git push -u origin main
