@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
+import json
 import uuid
 
 class CandidateBase(BaseModel):
@@ -42,6 +43,16 @@ class Candidate(CandidateBase):
     source_weight: float = 1.0
     created_at: datetime
     updated_at: datetime
+
+    @field_validator('skills', 'search_keywords', mode='before')
+    @classmethod
+    def deserialize_json_fields(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return v
+        return v
 
     class Config:
         from_attributes = True

@@ -3,21 +3,31 @@ from sqlalchemy.future import select
 from app.models.position import Position
 from app.schemas.position import PositionCreate, PositionUpdate
 from typing import List, Optional
+import json
 import uuid
+
+
+def _serialize_position_data(data: dict) -> dict:
+    """Serialize list fields to JSON strings for database storage."""
+    for field in ("required_skills", "search_keywords"):
+        if field in data and data[field] is not None:
+            data[field] = json.dumps(data[field])
+    return data
 
 class PositionRepository:
     def __init__(self, db_session: AsyncSession):
         self.db_session = db_session
 
     async def create(self, position_data: PositionCreate) -> Position:
-        db_position = Position(**position_data.model_dump())
+        data = _serialize_position_data(position_data.model_dump())
+        db_position = Position(**data)
         self.db_session.add(db_position)
         await self.db_session.commit()
         await self.db_session.refresh(db_position)
         return db_position
 
     async def get_by_id(self, position_id: uuid.UUID) -> Optional[Position]:
-        stmt = select(Position).where(Position.id == position_id)
+        stmt = select(Position).where(Position.id == str(position_id))
         result = await self.db_session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -32,7 +42,8 @@ class PositionRepository:
     async def update(self, position_id: uuid.UUID, position_data: PositionUpdate) -> Optional[Position]:
         db_position = await self.get_by_id(position_id)
         if db_position:
-            for field, value in position_data.model_dump(exclude_unset=True).items():
+            update_data = _serialize_position_data(position_data.model_dump(exclude_unset=True))
+            for field, value in update_data.items():
                 setattr(db_position, field, value)
             await self.db_session.commit()
             await self.db_session.refresh(db_position)

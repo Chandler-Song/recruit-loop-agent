@@ -3,21 +3,31 @@ from sqlalchemy.future import select
 from app.models.candidate import Candidate
 from app.schemas.candidate import CandidateCreate, CandidateUpdate
 from typing import List, Optional
+import json
 import uuid
+
+
+def _serialize_candidate_data(data: dict) -> dict:
+    """Serialize list fields to JSON strings for database storage."""
+    for field in ("skills", "search_keywords"):
+        if field in data and data[field] is not None:
+            data[field] = json.dumps(data[field])
+    return data
 
 class CandidateRepository:
     def __init__(self, db_session: AsyncSession):
         self.db_session = db_session
 
     async def create(self, candidate_data: CandidateCreate) -> Candidate:
-        db_candidate = Candidate(**candidate_data.model_dump())
+        data = _serialize_candidate_data(candidate_data.model_dump())
+        db_candidate = Candidate(**data)
         self.db_session.add(db_candidate)
         await self.db_session.commit()
         await self.db_session.refresh(db_candidate)
         return db_candidate
 
     async def get_by_id(self, candidate_id: uuid.UUID) -> Optional[Candidate]:
-        stmt = select(Candidate).where(Candidate.id == candidate_id)
+        stmt = select(Candidate).where(Candidate.id == str(candidate_id))
         result = await self.db_session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -45,7 +55,8 @@ class CandidateRepository:
     async def update(self, candidate_id: uuid.UUID, candidate_data: CandidateUpdate) -> Optional[Candidate]:
         db_candidate = await self.get_by_id(candidate_id)
         if db_candidate:
-            for field, value in candidate_data.model_dump(exclude_unset=True).items():
+            update_data = _serialize_candidate_data(candidate_data.model_dump(exclude_unset=True))
+            for field, value in update_data.items():
                 setattr(db_candidate, field, value)
             await self.db_session.commit()
             await self.db_session.refresh(db_candidate)

@@ -1,164 +1,208 @@
-# Recruiting Loop Agent v3.0
+# loop-agent-cli
 
-An autonomous recruiting agent that continuously searches for candidates until the position is closed.
+> Typer + Rich CLI for [recruit-loop-agent](https://github.com/Chandler-Song/recruit-loop-agent) — 在终端中完成招聘循环的全部操作，无需启动 FastAPI Web 服务。
 
-## Overview
+## 功能特性
 
-The Recruiting Loop Agent is designed to run indefinitely, searching for candidates, deduplicating, updating databases, automatically scoring, contacting candidates, and continuing the search until a position is closed.
+- **零服务依赖**：不启动 uvicorn，直接在进程内调用核心引擎
+- **完整功能覆盖**：职位管理、候选人查看、管道操作、循环执行、调度控制、仪表盘
+- **终端友好**：Rich 彩色表格/面板，结构化输出
 
-## Tech Stack
-
-- Backend: FastAPI
-- Agent: LangGraph
-- ORM: SQLAlchemy 2.x (Async)
-- Database: SQLite
-- Scheduler: APScheduler + asyncio
-- Frontend: React + Ant Design
-- HTTP Client: httpx
-- Email: smtplib
-- Container: Docker + Docker Compose + Nginx
-
-## Architecture
-
-The system follows a four-layer architecture:
-- HTTP Request
-- FastAPI Router
-- Service Layer
-- Repository Layer
-- SQLite Database
-
----
-
-## Production Deployment (Docker)
-
-### 一键部署
-
-适用于全新服务器，脚本会自动完成环境检查、Docker 安装、代码拉取、镜像构建和服务启动：
+## 安装
 
 ```bash
-# 方式1：直接在服务器运行
-bash deploy.sh
+# 从 PyPI 安装（正式发布后）
+pip install loop-agent-cli
 
-# 方式2：curl 一键部署（推送到 GitHub 后）
-curl -fsSL https://raw.githubusercontent.com/Chandler-Song/recruit-loop-agent/main/scripts/deploy.sh | bash
+# 开发模式安装（从项目根目录）
+cd recruit-loop-agent
+pip install -e .
 ```
 
-部署完成后：
+## 前置条件
 
-| 服务 | 地址 |
-|------|------|
-| 前端 | `http://<服务器IP>` |
-| 后端 API | `http://<服务器IP>:8000` |
-| API 文档 | `http://<服务器IP>:8000/docs` |
+- Python >= 3.9
+- `.env` 文件需存在于项目根目录（配置 `GITHUB_TOKEN`、`SMTP_*`、`LLM_*` 等）
+- 项目根目录需包含 `app/` 核心引擎包
 
-### 手动部署
+## 大模型（LLM）配置
+
+项目的 Agent 节点（评分、邮件生成、循环判断）通过 LLM 驱动，支持所有 **OpenAI 兼容接口**。
+
+### 配置方式
+
+在项目根目录的 `.env` 文件中设置以下环境变量：
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `LLM_API_BASE_URL` | API 地址（OpenAI 兼容 endpoint） | 无（必填） |
+| `LLM_API_KEY` | API 密钥 / Token | 无（必填） |
+| `LLM_MODEL_NAME` | 模型名称 | `gpt-4o` |
+| `LLM_TEMPERATURE` | 生成温度 | `0.7` |
+| `LLM_MAX_TOKENS` | 最大输出 token 数 | `2048` |
+| `LLM_TIMEOUT` | 请求超时时间（秒） | `60` |
+
+### 支持的服务商
+
+只需更换 `LLM_API_BASE_URL` 和 `LLM_API_KEY` 即可切换，代码无需修改：
+
+| 服务商 | `LLM_API_BASE_URL` | `LLM_MODEL_NAME` 示例 |
+|-------|-------------------|----------------------|
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o`, `gpt-4o-mini` |
+| DeepSeek | `https://api.deepseek.com` | `deepseek-chat`, `deepseek-reasoner` |
+| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus`, `qwen-max` |
+| 智谱 AI | `https://open.bigmodel.cn/api/paas/v4` | `glm-4`, `glm-4-flash` |
+| Moonshot | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
+| Ollama（本地） | `http://localhost:11434/v1` | `llama3`, `qwen2:7b` |
+
+### 配置示例
 
 ```bash
-# 1. 克隆代码
+# .env 文件（以 DeepSeek 为例）
+LLM_API_BASE_URL=https://api.deepseek.com
+LLM_API_KEY=sk-your-deepseek-api-key
+LLM_MODEL_NAME=deepseek-chat
+```
+
+> **注意**：如果未配置 LLM，Agent 节点会自动回退到规则引擎（技能匹配评分、模板邮件等），核心流程不受影响。
+
+## 使用示例
+
+### 查看帮助
+
+```bash
+loop-agent --help
+```
+
+### 职位管理
+
+```bash
+# 列出所有职位
+loop-agent position list
+
+# 创建新职位
+loop-agent position create -t "Senior Backend Engineer" -c "Tech Corp" \
+  -s "Python,FastAPI,PostgreSQL" -k "backend,python,remote"
+
+# 查看职位详情
+loop-agent position show <position_id>
+
+# 关闭职位
+loop-agent position close <position_id>
+```
+
+### 执行招聘循环
+
+```bash
+# 对已有职位执行一次循环
+loop-agent run position <position_id>
+
+# 创建职位并立即执行循环
+loop-agent run create-and-run -t "Python Developer" -c "Startup Inc" \
+  -s "Python,Django" -i 30
+```
+
+### 候选人管理
+
+```bash
+# 列出候选人（默认 20 条）
+loop-agent candidate list -n 10
+
+# 查看候选人详情
+loop-agent candidate show <candidate_id>
+```
+
+### 管道管理
+
+```bash
+# 列出所有管道
+loop-agent pipeline list
+
+# 按职位过滤
+loop-agent pipeline list -p <position_id>
+
+# 更新管道状态
+loop-agent pipeline update-status <pipeline_id> contacted
+```
+
+### 调度管理
+
+```bash
+# 启动后台调度器（Ctrl+C 退出）
+loop-agent schedule start
+
+# 列出调度任务
+loop-agent schedule list
+```
+
+### 仪表盘
+
+```bash
+# 查看仪表盘摘要
+loop-agent dashboard
+```
+
+### 其他
+
+```bash
+# 显示 LangGraph 图结构
+loop-agent graph
+
+# 显示版本信息
+loop-agent version
+```
+
+### 全局选项
+
+```bash
+# 覆盖数据库路径
+loop-agent --db sqlite+aiosqlite:///./custom.db position list
+```
+
+## 命令树
+
+```
+loop-agent
+├── run                          执行招聘循环
+│   ├── position <position_id>   对已有职位执行一次循环
+│   └── create-and-run           创建职位并立即执行循环
+├── position                     职位管理
+│   ├── list                     列出所有职位
+│   ├── create                   创建新职位
+│   ├── show <position_id>       查看职位详情
+│   └── close <position_id>      关闭职位
+├── candidate                    候选人管理
+│   ├── list                     列出候选人
+│   └── show <candidate_id>      查看候选人详情
+├── pipeline                     招聘管道管理
+│   ├── list                     列出管道
+│   └── update-status            更新管道状态
+├── schedule                     调度管理
+│   ├── start                    启动后台调度器
+│   └── list                     列出调度任务
+├── dashboard                    查看仪表盘摘要
+├── graph                        显示 LangGraph 图结构
+└── version                      显示版本信息
+```
+
+## 开发
+
+```bash
+# 克隆项目
 git clone git@github.com:Chandler-Song/recruit-loop-agent.git
 cd recruit-loop-agent
 
-# 2. 配置环境变量
-cp .env.example .env
-# 编辑 .env，填写 GITHUB_TOKEN、SMTP 等信息
+# 创建虚拟环境
+python -m venv venv
+source venv/bin/activate
 
-# 3. 启动服务
-docker compose up -d --build
+# 安装依赖
+pip install -e .
 
-# 4. 查看日志
-docker compose logs -f
+# 运行测试
+pytest app/tests/ -v
 ```
 
-### 环境变量
+## 许可证
 
-参考 `.env.example`，关键配置项：
-
-| 变量 | 说明 | 示例 |
-|------|------|------|
-| `DATABASE_URL` | 数据库连接 | `sqlite+aiosqlite:///./db/recruiting_agent.db` |
-| `GITHUB_TOKEN` | GitHub Personal Access Token | `ghp_xxxx` |
-| `SMTP_HOST` | 邮件服务器 | `smtp.gmail.com` |
-| `SMTP_USER` | 邮件用户名 | `your@gmail.com` |
-| `SMTP_PASSWORD` | 邮件密码/应用专用密码 | `xxxx` |
-| `SMTP_PORT` | 邮件端口 | `587` |
-| `EMAIL_FROM` | 发件人地址 | `your@gmail.com` |
-
----
-
-## Local Development
-
-### 后端启动
-
-前提条件：Python 3.8+
-
-```bash
-bash scripts/start_app.sh
-```
-
-- 自动创建虚拟环境 `venv/`
-- 从 `.env.example` 生成 `.env`（如不存在）
-- 安装 `requirements.txt` 依赖
-- 启动 FastAPI 服务于 `http://localhost:8000`（热重载）
-- API 文档：`http://localhost:8000/docs`
-
-### 前端启动
-
-前提条件：Node.js 16+、npm
-
-```bash
-bash scripts/start_frontend.sh
-```
-
-- 自动检测 `node_modules`，不存在则安装依赖
-- 设置 `REACT_APP_API_URL=http://localhost:8000/api/v1`
-- 启动 React 开发服务器于 `http://localhost:3000`
-
-### 代码推送
-
-```bash
-bash scripts/git-push.sh
-```
-
-- 自动初始化 Git 仓库（如不存在）
-- 配置远程仓库 `git@github.com:Chandler-Song/recruit-loop-agent.git`
-- 统一使用 `main` 分支
-- 交互式输入 commit message（回车使用默认时间戳格式）
-- 推送到远程仓库
-
----
-
-## Scripts Reference
-
-| 脚本 | 用途 | 环境 |
-|------|------|------|
-| `scripts/deploy.sh` | 远程服务器一键部署 | 生产环境 |
-| `scripts/start_app.sh` | 启动后端开发服务器 | 本地开发 |
-| `scripts/start_frontend.sh` | 启动前端开发服务器 | 本地开发 |
-| `scripts/git-push.sh` | Git 提交并推送代码 | 通用 |
-
-## Project Structure
-
-```
-loop-agent/
-├── app/                    # 后端 FastAPI 应用
-│   ├── api/               # API 路由层
-│   ├── services/          # 业务逻辑层
-│   ├── repositories/      # 数据访问层
-│   ├── models/            # SQLAlchemy ORM 模型
-│   ├── schemas/           # Pydantic 数据校验
-│   ├── agents/            # LangGraph 工作流
-│   ├── skills/            # GitHub 搜索技能
-│   ├── core/              # 配置、异常、日志
-│   ├── database/          # 数据库连接
-│   └── main.py            # 应用入口
-├── frontend/              # React 前端应用
-│   ├── src/               # 源码
-│   ├── public/            # 静态资源
-│   ├── Dockerfile         # 前端生产镜像
-│   └── nginx.conf         # Nginx 反向代理配置
-├── scripts/               # 自动化脚本
-├── docker-compose.yml     # Docker 编排
-├── Dockerfile             # 后端生产镜像
-├── requirements.txt       # Python 依赖
-└── .env.example           # 环境变量模板
-```
+MIT License
